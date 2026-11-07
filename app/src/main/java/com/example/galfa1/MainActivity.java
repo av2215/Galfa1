@@ -3,6 +3,7 @@ package com.example.galfa1;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
@@ -15,14 +16,16 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements LocationListener {
     private TextView tv;
+    private LocationManager lm;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         tv = findViewById(R.id.tv);
+        lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
     }
 
     public void button(View view) {
@@ -30,30 +33,73 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
             return;
         }
-        getLocation();
+        startGpsLocationUpdates();
     }
 
-    @SuppressLint("MissingPermission")
-    private void getLocation() {
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        Location gpsLoc = lm != null ? lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) : null;
-        Location netLoc = lm != null ? lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) : null;
-        Location loc = gpsLoc != null ? gpsLoc : netLoc;
+    public void openActivity2(View view) {
+        startActivity(new Intent(this, Activity2.class));
+    }
 
-        if (loc != null) {
-            display(loc);
-        } else if (lm != null) {
-            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, new LocationListener() {
-                @Override
-                public void onLocationChanged(@NonNull Location l) {
-                    display(l);
-                    lm.removeUpdates(this);
-                }
-            }, getMainLooper());
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startGpsLocationUpdates();
         }
     }
 
-    private void display(Location loc) {
-        tv.setText("Lat: " + loc.getLatitude() + "\nLon: " + loc.getLongitude() + "\nAlt: " + loc.getAltitude());
+    @SuppressLint("MissingPermission")
+    private void startGpsLocationUpdates() {
+        if (lm == null) return;
+
+        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            tv.setText("GPS is disabled. Please turn on GPS in device settings.");
+            return;
+        }
+
+        lm.removeUpdates(this);
+
+        // Request updates directly from GPS Provider
+        lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this, getMainLooper());
+
+        Location lastGpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        if (lastGpsLoc != null) {
+            displayGpsLocation(lastGpsLoc);
+        } else {
+            tv.setText("Acquiring GPS location fix...");
+        }
+    }
+
+    private void displayGpsLocation(Location loc) {
+        tv.setText("GPS Coordinates:\nLat: " + loc.getLatitude() + "\nLon: " + loc.getLongitude() + "\nAlt: " + loc.getAltitude() + " m");
+    }
+
+    @Override
+    public void onLocationChanged(@NonNull Location location) {
+        displayGpsLocation(location);
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+        // Stub required for API < 30 compatibility to prevent AbstractMethodError crash
+    }
+
+    @Override
+    public void onProviderEnabled(@NonNull String provider) {
+        // Stub required for API < 30 compatibility
+    }
+
+    @Override
+    public void onProviderDisabled(@NonNull String provider) {
+        // Stub required for API < 30 compatibility
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (lm != null && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            lm.removeUpdates(this);
+        }
     }
 }
